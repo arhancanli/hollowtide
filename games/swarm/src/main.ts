@@ -163,6 +163,78 @@ async function boot(): Promise<void> {
   let abilitySent = false;
   /** Rate limit on horde-handoff calls, in sim seconds. */
   let lastHandoffCall = -99;
+  /** Seconds this client has been in the current match. */
+  let arenaSeconds = 0;
+
+  /**
+   * Teaching the arena, one beat at a time, in the moment it applies.
+   *
+   * Three mechanics were added to this mode — mass as a body, the siphon, and
+   * dying as a cost rather than an ending — and none of them were explained
+   * anywhere. A player would watch their number fall with a red thread
+   * attached to it and have no way to learn what that was. A mechanic nobody
+   * understands is a mechanic that does not exist.
+   *
+   * The rules these follow, which is most of why they work:
+   *  - Fired by the SITUATION, never by a timer, so the sentence and the thing
+   *    it describes are on screen together.
+   *  - Once ever, persisted across sessions and merged across devices. A
+   *    tutorial that repeats is noise.
+   *  - One line on the banner that is already there. No modal, no pause, no
+   *    dismiss button — the match does not stop to talk to you.
+   */
+  const teach = (id: string, message: string): void => {
+    if (meta.hasTaught(id)) return;
+    meta.markTaught(id);
+    hud.announceArena(message, 2);
+  };
+
+  /** Checked once a frame while an arena match is running. */
+  const teachArena = (dt: number): void => {
+    if (!arenaMode || world.phase !== 'playing') return;
+    arenaSeconds += dt;
+    const me = world.player;
+
+    /**
+     * What the number even is, before anything else is explained.
+     *
+     * Measured against the first version: the siphon lesson beat this one to
+     * the screen, so a new player was told they were "draining" something
+     * before being told what mass was. Counted from THIS client's time in the
+     * match rather than the world clock, because a late joiner inherits a room
+     * clock of forty seconds and would have missed the window entirely.
+     */
+    if (!meta.hasTaught('arena.mass')) {
+      if (arenaSeconds > 2) {
+        teach('arena.mass', 'MASS IS YOUR SIZE  ·  MOST MASS AT THE CLOCK WINS');
+      }
+      return;
+    }
+    // The first time you are actually taking from somebody.
+    if (me.siphonLock > 1.2 && me.siphonTarget > 0) {
+      const who = (world.players[me.siphonTarget]?.name || 'THEM').toUpperCase();
+      teach('arena.siphon', `DRAINING ${who}  ·  STAY ON THEM AND IT GROWS`);
+      return;
+    }
+    // The first time somebody is taking from you.
+    for (const s2 of world.siphons) {
+      if (s2.from !== 0) continue;
+      const who = (world.players[s2.to]?.name || 'A RIVAL').toUpperCase();
+      teach('arena.drained', `${who} IS DRAINING YOU  ·  BREAK AWAY OR FIGHT BACK`);
+      return;
+    }
+    // The first time a rival is worth hunting because they are hurt.
+    // ANY hurt rival, not just a human one. Gating this on `live` meant it
+    // could never fire in a lobby of AI — which is every lobby until the relay
+    // is deployed, and most of them afterwards.
+    for (const q of world.players) {
+      if (q.index === 0 || !q.alive) continue;
+      if (q.hp / Math.max(1, q.maxHp) < 0.4) {
+        teach('arena.prey', 'A RIVAL IS HURT  ·  GET CLOSE AND TAKE IT');
+        return;
+      }
+    }
+  };
   const setAdInFlight = (busy: boolean, label = 'AD LOADING…'): void => {
     adInFlight = busy;
     adShield.textContent = label;
@@ -517,6 +589,7 @@ async function boot(): Promise<void> {
     hud.setAbility(ab.name, ab.desc, ab.color);
     hud.setTeachAbility(!meta.current.abilityUsed);
     hud.setPlayVisible(true);
+    arenaSeconds = 0;
     hud.beginRun(arenaMode);
     if (arenaMode && relayUrl && match === undefined && session.state.status === 'offline') {
       hud.announceArena('LIVE MATCH UNAVAILABLE  ·  7 AI RIVALS JOINED', 1);
@@ -990,7 +1063,13 @@ async function boot(): Promise<void> {
         else if (ev.type === 'bossSpawned') analytics.track('boss_spawned', { name: ev.name });
         else if (ev.type === 'bossKilled') analytics.track('boss_killed');
         else if (ev.type === 'respawned') {
-          if (ev.seat === 0) hud.announceArena('BACK IN  ·  YOUR MASS IS ON THE FLOOR', 2);
+          if (ev.seat !== 0) continue;
+          if (!meta.hasTaught('arena.death')) {
+            meta.markTaught('arena.death');
+            hud.announceArena('DYING COSTS YOUR MASS, NOT YOUR MATCH  ·  GO GET IT BACK', 2);
+          } else {
+            hud.announceArena('BACK IN  ·  YOUR MASS IS ON THE FLOOR', 2);
+          }
         }
         else if (ev.type === 'matchOver') {
           hud.announceArena(
@@ -1032,6 +1111,8 @@ async function boot(): Promise<void> {
       world.clearEvents();
 
       // Run milestones. 15s and 60s are the two the portal funnel turns on.
+      teachArena(dt);
+
       if (!hit15 && world.time >= 15) {
         hit15 = true;
         analytics.runMilestone(15);

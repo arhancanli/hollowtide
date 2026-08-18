@@ -17,18 +17,28 @@ export class ModeSelectScreen {
   private readonly tide = new Graphics();
   private readonly eyebrow = text('CHOOSE YOUR TIDE', 11, 0x7792bd, 2.8);
   private readonly title = text('HOLLOWTIDE', 48, 0xf2f7ff, 3.5, '900');
-  private readonly promise = text('GROW  ·  HUNT  ·  OUTLAST', 12, 0x76e8ff, 2.2, '800');
+  private readonly promise = text('GROW  ·  HUNT  ·  TAKE THE CROWN', 12, 0x76e8ff, 2.2, '800');
+  /**
+   * The two doors, described as the two different games they are.
+   *
+   * This copy used to sell multiplayer as "8 survivors, shared prey" — the same
+   * game with more bodies in it. It is not: solo is one life against the tide,
+   * multiplayer is a five-minute match where you respawn and the most mass at
+   * the clock wins. A player who picks the wrong door because the sign was
+   * wrong is a player who bounces, and the sign is the cheapest thing here to
+   * get right.
+   */
   private readonly solo = this.makeCard(
     'SOLO',
-    'MASTER THE TIDE',
-    'Build impossible weapons.\nPush your personal best.',
+    'ONE LIFE  ·  MASTER THE TIDE',
+    'Build impossible weapons.\nSurvive as long as you can.',
     0x55d7ff,
     'solo',
   );
   private readonly multi = this.makeCard(
     'MULTIPLAYER',
-    'TAKE THE CROWN',
-    '8 survivors. Shared prey.\nGrow fast, hunt rivals, reach #1.',
+    '5 MINUTES  ·  TAKE THE CROWN',
+    'Eat what the fallen drop.\nYou respawn. Most mass wins.',
     0xff647d,
     'multiplayer',
   );
@@ -54,8 +64,8 @@ export class ModeSelectScreen {
   setOnline(online: boolean): void {
     this.online = online;
     this.status.text = online
-      ? 'LIVE MATCHMAKING  ·  EMPTY SEATS BECOME RIVALS'
-      : 'MULTIPLAYER PRACTICE  ·  7 AI RIVALS';
+      ? 'LIVE MATCHMAKING  ·  EMPTY SEATS BECOME AI RIVALS'
+      : 'MULTIPLAYER vs 7 AI RIVALS  ·  LIVE MATCHES COMING';
   }
 
   show(): void {

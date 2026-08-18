@@ -52,6 +52,15 @@ export interface MetaState {
    * invisible. Persisted for the same reason the movement hint is.
    */
   abilityUsed: boolean;
+  /**
+   * Lessons this player has already been shown, by id.
+   *
+   * A list rather than a flag per lesson so the arena can grow new ones
+   * without another migration. Every entry is shown ONCE, ever, in the
+   * situation it explains — a tutorial that repeats is noise, and one that
+   * fires away from the thing it describes teaches nothing.
+   */
+  taught: string[];
   /** Difficulty tier chosen for the next run. */
   ascension: number;
   /** Best time reached at each tier, keyed by tier number. Drives unlocks. */
@@ -80,6 +89,7 @@ const EMPTY: MetaState = {
   bestByCharacter: {},
   muted: false,
   abilityUsed: false,
+  taught: [],
   ascension: 0,
   bestByAscension: {},
   mastery: {},
@@ -165,6 +175,8 @@ export class MetaStore {
       ownedCharacters: [...new Set([...cloud.ownedCharacters, ...local.ownedCharacters])],
       achievements: [...new Set([...cloud.achievements, ...local.achievements])],
       abilityUsed: cloud.abilityUsed || local.abilityUsed,
+      // Merged as a union: a lesson learned on either device is learned.
+      taught: [...new Set([...(cloud.taught ?? []), ...(local.taught ?? [])])],
       muted: local.muted,
       arenaBestMass: Math.max(cloud.arenaBestMass, local.arenaBestMass),
       arenaBestPlace: bestPlace(cloud.arenaBestPlace, local.arenaBestPlace),
@@ -219,6 +231,9 @@ export class MetaStore {
             : {},
         muted: parsed.muted === true,
         abilityUsed: parsed.abilityUsed === true,
+        taught: Array.isArray(parsed.taught)
+          ? (parsed.taught as unknown[]).filter((x): x is string => typeof x === 'string')
+          : [],
         ascension: Number(parsed.ascension) || 0,
         bestByAscension:
           parsed.bestByAscension && typeof parsed.bestByAscension === 'object'
@@ -271,6 +286,18 @@ export class MetaStore {
     this.state.bestByAscension[key] = time;
     this.save();
     return true;
+  }
+
+  /** Has this player already been shown `id`? */
+  hasTaught(id: string): boolean {
+    return this.state.taught.includes(id);
+  }
+
+  /** Record that `id` has been shown, and never show it again. */
+  markTaught(id: string): void {
+    if (this.state.taught.includes(id)) return;
+    this.state.taught.push(id);
+    this.save();
   }
 
   markAbilityUsed(): void {

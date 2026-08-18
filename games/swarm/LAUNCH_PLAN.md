@@ -39,6 +39,9 @@ python3 ~/.agents/skills/webapp-testing/scripts/with_server.py \
   -- sh -c "python3 tools/multiplayer-smoke.py && python3 tools/latejoin-smoke.py"
 
 python3 ~/.agents/skills/webapp-testing/scripts/with_server.py \
+  --server "npm run dev" --port 5180 -- python3 tools/teaching-smoke.py
+
+python3 ~/.agents/skills/webapp-testing/scripts/with_server.py \
   --server "VITE_RELAY_URL=ws://127.0.0.1:8999 npm run dev" --port 5180 \
   -- python3 tools/offline-fallback-smoke.py
 ```
