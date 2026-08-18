@@ -50,13 +50,24 @@ npm run build --workspace=games/swarm
 
 **Short description** (~150 chars)
 
-> Survive an endless tide alone or race live rivals. Build wild weapon
-> evolutions, master six heroes, and outlast escalating bosses. Free in browser.
+> Survive an endless tide alone, or fight seven rivals for the crown in a
+> five-minute arena. Build wild weapon evolutions, eat what the fallen drop,
+> and take the most mass before the clock. Free in browser.
 
 **Full description**
 
-> The tide is coming. Face it alone—or outlast live rivals in an eight-seat
-> survival arena that replaces disconnected players with AI.
+> The tide is coming. Face it alone — or take it into a five-minute arena
+> against seven rivals, where the swarm is only the terrain.
+>
+> MULTIPLAYER IS ITS OWN GAME. You respawn. Dying costs you everything you were
+> carrying — it hits the floor for whoever is standing there — and three
+> seconds. Your body grows with the mass you hold, so you can read the food
+> chain across the arena at a glance, and being the biggest makes you the
+> biggest target for a swarm that kills by touch. Get close to a wounded rival
+> and their mass bleeds into yours, harder the longer you commit. Or gather a
+> horde and put it on them, and kill someone without ever shooting at them.
+> Most mass when the clock runs out takes the crown. Empty seats are filled by
+> AI so a match is never a waiting room.
 >
 > Move to survive — your weapons fire themselves. Every level, choose one of
 > three upgrades and shape a build out of what the run gives you. Max a weapon
@@ -162,9 +173,11 @@ Determinism: a four-minute run hashes identically on V8 and JavaScriptCore
 across five seeds, guarded in CI by `npm run detguard`. This makes
 server-verified leaderboards possible later — it is not used yet.
 
-Multiplayer: 24 measured eight-seat races produce a lead change in every race,
-9,265 PvP hits, 81 rival eliminations and a median 247-point MASS spread. Every
-weapon family participates in PvP.
+Multiplayer, across 24 races and 40 full matches: a lead change in every race,
+36,296 PvP hits, 677 rival eliminations, and 37.7% of all mass changing hands
+between players rather than coming off the field. Every match reaches its clock
+and the lobby holds 7.1-7.5 of its 8 seats deep into one — it used to be down to
+a single seat by 110 seconds. The player spends 22 seconds of 300 dead.
 
 The network layer is measured separately by `npm run netprobe`, which runs real
 clients against a real relay: three players arriving 0s/2s/6s apart share one

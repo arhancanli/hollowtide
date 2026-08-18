@@ -69,9 +69,47 @@ Multiplayer; neither is hidden behind a death or a rotating mode control.
 
 ## Multiplayer
 
-Eight seats, one tide. Every seat is simulated by every client; something writes
-its input. That is the whole architecture, and it is why a person can take over
-a seat mid-run with no spawn, no queue and no lobby transition.
+**Not the solo game with seven extra bodies.** Solo is *survive the tide*: one
+life, and the question is how long you lasted. Multiplayer is a five-minute
+match between people in which the tide is the terrain — you respawn, and the
+most mass at the end wins.
+
+That distinction was learned the hard way. The arena used to have solo's shape
+— one life each — so every death permanently removed a combatant and an
+eight-seat lobby could only shrink. Measured, it was down to a single seat by
+110 seconds, with the rest of the match a solo farm. No tuning fixes a mode
+that structurally empties itself.
+
+| | Solo | Multiplayer |
+| --- | --- | --- |
+| shape | one life | 5-minute match, respawns |
+| you win by | lasting | holding the most mass at the clock |
+| death costs | the run | your mass, and three seconds |
+| the danger is | the swarm | the other seven, with the swarm as terrain |
+
+**Mass is your body.** It grows with what you have eaten, so the food chain is
+readable across the arena without a number — and a bigger body is a bigger
+target for a swarm whose whole threat model is contact. Growth buys the lead
+and charges you for holding it.
+
+**You take mass off each other.** Engage a rival and the drain runs toward
+whoever is in better shape, ramping the longer you hold them and resetting if
+you switch. Keyed on health rather than size deliberately: keyed on size, the
+biggest player eats everyone and the lead compounds into a formality.
+
+**Your weapons only hurt the rival you are engaged with.** Before that rule,
+130 of 130 rival deaths in a 40-run sample came from another combatant's weapon
+fire and zero from the swarm — eight bodies share one screen and every seat runs
+auto-firing area weapons, so the lobby shredded itself by the thirty-second mark
+with nobody choosing any of it.
+
+**You can kill someone without shooting them.** Enemies keep chasing whoever
+they are chasing until somebody is meaningfully closer, so a horde is something
+you can gather, carry, and put on a rival.
+
+Every seat is simulated by every client; something writes its input. That is the
+whole architecture, and it is why a person can take over a seat mid-match with
+no spawn, no queue and no lobby transition.
 
 **One rule holds it together: every seat has exactly one authority.**
 
@@ -110,8 +148,14 @@ for actual people:
 
 Current readings: remote position error **4.5u mean**, rival identity mismatch
 **0/33,216 samples**, and with the fight frozen so every packet lands, all four
-clients hold a **byte-identical scoreboard**. Mid-fight reads differ on ~5% of
-samples, which is packets in flight and not a disagreement.
+clients agree on the **exact finishing order**. Mass differs between them by
+~0.3 of a unit — it became a continuously integrated quantity when the siphon
+landed, so the check asserts order rather than bytes, and says why in place.
+
+Measured across 40 matches and 24 races: all 40 reach the full clock, the lobby
+holds **7.1-7.5 of 8 seats** deep into a match, the player spends 22 seconds of
+300 dead, **677 rival eliminations** across 24 races, and **37.7% of all mass
+changes hands between players** rather than coming off the field.
 
 ## Content
 

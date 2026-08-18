@@ -15,8 +15,9 @@ The game code is release-candidate quality when these three external gates pass:
 3. CrazyGames Developer Portal Preview passes SDK, responsive layout, ads,
    cloud save, account-name display, and room-presence checks.
 
-Without a relay URL, Solo and eight-seat Multiplayer practice remain fully
-playable with seven AI rivals. The production multiplayer build must be compiled after the relay is
+Without a relay URL, Solo and the eight-seat Multiplayer match remain fully
+playable with seven AI rivals — the mode is a timed arena with respawns, so an
+AI lobby is a complete game rather than a waiting room. The production multiplayer build must be compiled after the relay is
 deployed:
 
 ```bash
