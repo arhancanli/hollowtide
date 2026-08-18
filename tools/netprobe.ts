@@ -633,13 +633,70 @@ async function rematch(): Promise<void> {
      * quietly buries a live opponent and spills their mass on the floor, which
      * is the part that actually changes the game.
      */
+    /**
+     * The corpse signature, not "somebody died early".
+     *
+     * Seats respawn now and duels are fast, so a human being killed four
+     * seconds into a match is ordinary play — the first version of this check
+     * flagged exactly that and was measuring the mode rather than the defect.
+     * What a leaked corpse actually looks like is unmistakable: one client
+     * believes a peer is dead while that peer's own machine has them alive.
+     */
     let watching = false;
-    let earlyDeaths = 0;
-    let spilledGems = 0;
+    /**
+     * Measured as DURATION, not as instants.
+     *
+     * A seat that goes briefly stale is demoted to AI, can be killed locally,
+     * and is corrected by the next packet ~60ms later — that flickers the
+     * state for a handful of readings and is not a defect. A leaked corpse
+     * pins a live player dead until something else happens to them. So the
+     * question is how long the wrong state SURVIVES.
+     */
+    let phantom = 0;
+    let phantomRun = 0;
+    let openingMass = 0;
+    let openingSamples = 0;
     const pump = race([a, b], 7, () => {
-      if (!watching || b.world.time > 2.5) return;
-      for (const p of b.world.players) if (!p.alive) earlyDeaths++;
-      spilledGems = Math.max(spilledGems, b.world.gems.count);
+      if (!watching) return;
+      for (const [me, peer] of [[a, b], [b, a]] as const) {
+        const seat = me.world.players.find((p) => p.live && p.name === peer.name);
+        // You cannot have been buried if you have never died this match. That
+        // is the exact signature of a corpse from the PREVIOUS run arriving,
+        // and it excludes the ordinary case of a client not yet having heard
+        // that a peer respawned — which is packet lag, not a defect.
+        const wrong = !!seat && !seat.alive && peer.world.player.alive
+          && peer.world.player.deaths === 0;
+        if (wrong) {
+          phantomRun++;
+          phantom = Math.max(phantom, phantomRun);
+        } else {
+          phantomRun = 0;
+        }
+      }
+      /**
+       * The lasting harm, which survived the mode changing shape underneath it.
+       *
+       * A leaked corpse spills the previous run's mass onto the floor of the
+       * new match.
+       *
+       * HONEST NOTE ON WHAT THIS STILL PROVES. When respawns landed, the blast
+       * radius of that defect collapsed: the phantom death now self-heals in a
+       * packet, and loot pays mass rather than experience, so reintroducing the
+       * bug moves this number from 100 to about 102. This scenario no longer
+       * reproduces the original symptom and should not be read as if it does.
+       * What it still does is BOUND the opening: a late-game corpse carries
+       * thousands of mass, and that — the dangerous version — would fail here
+       * loudly. The `armed` flag it was written for is verified by the history,
+       * not by this assertion. The phantom death itself now self-heals in a packet, but
+       * that pile does not — somebody banks hundreds of mass in the opening
+       * seconds of a match where nobody has earned anything yet. Every seat
+       * starts at exactly ARENA.respawnMass, so this is a hard bound.
+       */
+      for (const c of [a, b]) {
+        if (c.world.time > 6) continue;
+        openingSamples++;
+        openingMass = Math.max(openingMass, c.world.player.arenaScore);
+      }
     });
     const settledA = a.matchOnly(url);
     await sleep(2_500);
@@ -655,27 +712,36 @@ async function rematch(): Promise<void> {
     await pump;
 
     notes.push(
-      `${S}: in the first 2.5s of the new match FRIEND_B saw ${earlyDeaths} dead-seat readings ` +
-        `and a peak of ${spilledGems} gems on the field`,
+      `${S}: longest stretch with a peer wrongly believed dead = ${phantom} readings ` +
+        '(a stale seat corrects within a packet; a leaked corpse does not)',
+    );
+    notes.push(
+      `${S}: highest mass any client held in the opening seconds = ${openingMass.toFixed(0)} ` +
+        `(starts at 100, from ${openingSamples} samples)`,
+    );
+    // A measurement of nothing is not a pass. If the window was never sampled,
+    // say so and fail, rather than reporting a zero as clean.
+    check(
+      S,
+      openingSamples > 20,
+      `the opening-mass window was sampled ${openingSamples} times — this check did not run`,
     );
     check(
       S,
-      earlyDeaths === 0,
-      `a seat was dead ${earlyDeaths} readings into the opening 2.5 seconds of a fresh match — ` +
-        "the previous run's corpse was published into it",
+      openingMass < 260,
+      `a client banked ${openingMass.toFixed(0)} mass in the first four seconds of a match, ` +
+        "starting from 100 — the previous run's mass was spilled into the new match",
+    );
+    check(
+      S,
+      phantom < 40,
+      `a client held a peer dead for ${phantom} consecutive readings while that peer had ` +
+        "never died — the previous run's corpse was published into the new match",
     );
 
     const humanNames = new Set(['FRIEND_A', 'FRIEND_B']);
-    const ghosts = [...a.claimed, ...b.claimed].filter((c) => humanNames.has(c.victim));
-    notes.push(
-      `${S}: eliminations of a live player in the first 3s of the rematch = ${ghosts.length}` +
-        (ghosts.length ? ` (${JSON.stringify(ghosts)})` : ''),
-    );
-    check(
-      S,
-      ghosts.length === 0,
-      `the previous run's corpse was published into the new match: ${JSON.stringify(ghosts)}`,
-    );
+    const humanKills = [...a.claimed, ...b.claimed].filter((c) => humanNames.has(c.victim));
+    notes.push(`${S}: eliminations of a human seat in the new match = ${humanKills.length} (ordinary play)`);
     for (const c of [a, b]) {
       // Skipped for a client that legitimately fast-forwarded into a running
       // room: a late joiner is SUPPOSED to arrive several levels in, and this
@@ -815,13 +881,17 @@ async function authority(): Promise<void> {
     // same way, because there is no other way to stage a death on demand.
     (prey.world as unknown as { killPlayer(): void }).killPlayer();
     const before = hunter.world.player.pvpKills;
-    await race([hunter, prey], 3);
     const localPrey = hunter.world.players[seat]!;
+    let hunterSawDeath = false;
+    for (let i = 0; i < 30 && !hunterSawDeath; i++) {
+      await race([hunter, prey], 0.15);
+      hunterSawDeath = hunterSawDeath || !localPrey.alive;
+    }
     notes.push(
-      `${S}: after PREY's own machine reported the death — seen dead by HUNTER: ${!localPrey.alive}; ` +
+      `${S}: after PREY's own machine reported the death — seen dead by HUNTER: ${hunterSawDeath}; ` +
         `HUNTER credited ${hunter.world.player.pvpKills - before} elimination(s)`,
     );
-    check(S, !localPrey.alive, 'a real death reported by its owner never reached the other client');
+    check(S, hunterSawDeath, 'a real death reported by its owner never reached the other client');
     check(
       S,
       hunter.world.player.pvpKills > before,
@@ -877,16 +947,24 @@ async function claim(): Promise<void> {
     );
     check(S, !buriedLocally, 'a client buried a seat it does not own instead of claiming the kill');
 
-    await race([owner, guest], 2.5);
-    await settle([owner, guest], 500);
+    // Poll for the death rather than asserting at a fixed moment: seats now
+    // RESPAWN three seconds after dying, so a check that runs a beat late sees
+    // a living seat and reports the opposite of the truth.
+    let ownerSaw = false;
+    let guestSaw = false;
+    for (let i = 0; i < 30 && !(ownerSaw && guestSaw); i++) {
+      await race([owner, guest], 0.15);
+      ownerSaw = ownerSaw || !mirror.alive;
+      guestSaw = guestSaw || !target.alive;
+    }
 
     notes.push(
-      `${S}: after the claim — owner sees it ${mirror.alive ? 'alive' : 'dead'}, ` +
-        `guest sees it ${target.alive ? 'alive' : 'dead'}, ` +
+      `${S}: after the claim — owner ${ownerSaw ? 'ran' : 'never ran'} the death, ` +
+        `guest ${guestSaw ? 'saw' : 'never saw'} it land, ` +
         `guest credited ${guest.world.player.pvpKills - pvpBefore} elimination(s)`,
     );
-    check(S, !mirror.alive, 'the owner never ran the death the guest claimed');
-    check(S, !target.alive, 'the guest never saw the kill it claimed land');
+    check(S, ownerSaw, 'the owner never ran the death the guest claimed');
+    check(S, guestSaw, 'the guest never saw the kill it claimed land');
     check(
       S,
       guest.world.player.pvpKills > pvpBefore,

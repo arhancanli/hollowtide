@@ -21,7 +21,7 @@ import { World } from '../src/sim/world.js';
 import { threatTierAt } from '../src/content/waves.js';
 
 const RUNS = 40;
-const CAP = 300;
+const CAP = 320;
 const BUCKET = 10;
 const N = Math.ceil(CAP / BUCKET);
 
@@ -50,6 +50,8 @@ const playerAt30: number[] = [];
 let killedByPlayer = 0;
 let killedByWorld = 0;
 let killedBySeatZero = 0;
+let playerDown = 0;
+let matchesFinished = 0;
 
 for (let run = 0; run < RUNS; run++) {
   const seed = 40_009 + run * 7_331;
@@ -69,6 +71,7 @@ for (let run = 0; run < RUNS; run++) {
   for (let step = 0; step < CAP / FIXED_STEP; step++) {
     if (world.phase === 'dead') break;
     const b = Math.min(N - 1, Math.floor(world.time / BUCKET));
+    if (world.player.respawnIn > 0) playerDown += FIXED_STEP;
 
     if (world.phase === 'levelup') {
       const offer = world.pendingCards ?? [];
@@ -112,6 +115,7 @@ for (let run = 0; run < RUNS; run++) {
       if (world.activeBossName) bossOn[b]! += 1;
       alive[b]! += world.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0);
       if (b === 3) playerAt30.push(world.player.level);
+      for (const q2 of world.players) if (q2.alive) deathSeen[q2.index] = false;
       for (const q2 of world.players) {
         if (q2.index === 0 || q2.alive || deathSeen[q2.index]) continue;
         deathSeen[q2.index] = true;
@@ -140,6 +144,7 @@ for (let run = 0; run < RUNS; run++) {
     }
   }
   aliveAtEnd += world.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0);
+  if (world.time >= 300) matchesFinished++;
 }
 
 const per = (a: Float64Array, i: number): number => a[i]! / RUNS;
@@ -189,6 +194,9 @@ console.log(`  killed by another COMBATANT: ${killedByPlayer} of ${deaths} ` +
 console.log(`  killed by the WORLD (swarm, tide, ring): ${killedByWorld} of ${deaths}`);
 console.log(`  mean skill of the dead: ${mean(deadSkill).toFixed(2)} (profiles run 0.05-0.98)`);
 console.log(`  the PLAYER at 30s for comparison: level ${mean(playerAt30).toFixed(1)}`);
+console.log(`  matches that reached the full clock: ${matchesFinished}/${RUNS}`);
+console.log(`  seconds the player spent dead per match: ${(playerDown / RUNS).toFixed(1)}`);
+console.log(`  deaths per match across the lobby: ${(rivalLives.length / RUNS).toFixed(1)}`);
 console.log(`  seats still alive when the run ended: ${(aliveAtEnd / RUNS).toFixed(1)} of 8`);
 console.log('');
 console.log(`threat tier at 30s/90s/180s/270s: ${threatTierAt(30)} / ${threatTierAt(90)} / ${threatTierAt(180)} / ${threatTierAt(270)}`);

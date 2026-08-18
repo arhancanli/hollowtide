@@ -14,6 +14,8 @@ import {
   GEM,
   HEALTH_DROP,
   AGGRO,
+  ARENA,
+  MASS,
   OPENING,
   PLAYER,
   SIPHON,
@@ -174,29 +176,24 @@ export const ARENA_RING = {
 
 const PVP = {
   /**
-   * What a shot is worth against a person, and why it is now so small.
+   * What a shot is worth against a person.
    *
-   * These two numbers, not maxShare, are what actually set PvP damage: the
-   * bite is min(maxShare * maxHp, flat + rawDamage * scale), and the cap only
-   * binds above about four. Halving maxShare three times therefore changed
-   * nothing measurable, which is exactly the sort of dial that looks tuned and
-   * is inert.
+   * These two, not maxShare, are the actual dial: the bite is
+   * min(maxShare * maxHp, flat + rawDamage * scale), and the cap only binds
+   * above about four — halving maxShare three times in a row changed the
+   * measured outcome by nothing, which is the signature of a control that
+   * looks tuned and is inert.
    *
-   * They were 2 and 0.02, and at that setting an eight-seat lobby destroyed
-   * itself: 130 of 130 rival deaths in a 40-run sample came from another
-   * combatant's weapon fire and ZERO from the swarm, with a median lifetime of
-   * 30 seconds and the whole field gone inside one twelve-second window. In a
-   * survivor-like, the swarm killing nobody is the plot being lost.
-   *
-   * At 0.5 and 0.005, with damage also gated on engagement (see hitRival):
-   * median rival lifetime 150s against a competent human's 160s solo, deaths
-   * spread from 104s to 198s instead of arriving all at once, and the swarm
-   * accounts for a fifth of them. A duel still resolves in seconds against
-   * somebody the swarm has already opened up — which is precisely when the
-   * siphon wants you to attack.
+   * They were briefly cut to an eighth of this, to stop an eight-seat lobby
+   * destroying itself in thirty seconds. That was treating the symptom, and it
+   * was making multiplayer into single-player with spectators: the fix for a
+   * lobby that empties is not weaker players, it is players who come back.
+   * With respawns (see ARENA) and with damage gated on engagement (see
+   * hitRival), a fast, decisive duel is the point of the mode rather than a
+   * bug in it.
    */
-  scale: 0.005,
-  flat: 0.5,
+  scale: 0.02,
+  flat: 2,
   maxShare: 0.08,
   /** Longer than a monster's, so nobody is chain-shot out of a bad position. */
   iframes: 0.45,
@@ -284,6 +281,14 @@ export interface Player extends PlayerStats, RunState {
   /** Last rival to damage this seat, for fair elimination credit. */
   lastHitBy: number;
   lastHitAt: number;
+  /**
+   * Seconds until this seat is back in the match. Zero when alive or in solo.
+   *
+   * Death in the arena is a cost, not an ending — see ARENA in balance.ts.
+   */
+  respawnIn: number;
+  /** Times this seat has gone down this match. */
+  deaths: number;
   /** The rival this seat is currently draining, or -1. Local seat index. */
   siphonTarget: number;
   /** Seconds spent holding that target, which is what makes the drain strong. */
@@ -650,6 +655,8 @@ export class World {
       pvpKills: 0,
       arenaStreak: 0,
       seatId: index,
+      respawnIn: 0,
+      deaths: 0,
       siphonTarget: -1,
       siphonLock: 0,
       lastHitBy: -1,
@@ -961,6 +968,8 @@ export class World {
       p.lastHitAt = -999;
       p.siphonTarget = -1;
       p.siphonLock = 0;
+      p.respawnIn = 0;
+      p.deaths = 0;
       p.stacks.clear();
       p.boons.clear();
       p.banished.clear();
@@ -1106,6 +1115,7 @@ export class World {
     this.playerContact(dt);
 
     if (this.players.length > 1) {
+      this.updateRespawns(dt);
       this.updateArenaRing(dt);
       this.updateSiphon(dt);
       const bleed = AGGRO.decay * dt;
@@ -1114,6 +1124,20 @@ export class World {
           this.handoffTally[i] = Math.max(0, this.handoffTally[i]! - bleed);
         }
       }
+    }
+
+    // The match is a fixed length, not a survival test. Ending on a clock is
+    // what gives the last thirty seconds their tension and produces a winner
+    // rather than a survivor.
+    if (this.players.length > 1 && this.time >= ARENA.matchSeconds && this.phase === 'playing') {
+      const top = this.standings()[0];
+      this.phase = 'dead';
+      this.events.push({
+        type: 'matchOver',
+        winner: top ? (top.index === 0 ? 'YOU' : top.name) : '',
+        mass: Math.round(top?.arenaScore ?? 0),
+      });
+      return;
     }
 
     this.compactEnemies();
@@ -1468,6 +1492,12 @@ export class World {
 
   private updatePlayer(dt: number): void {
     const p = this.player;
+    // Dead seats do not steer. In solo the phase change stops the world here;
+    // in the arena the match carries on around the body for three seconds.
+    if (!p.alive) {
+      if (p.invul > 0) p.invul -= dt;
+      return;
+    }
     p.px = p.x;
     p.py = p.y;
     p.x += this.input.x * p.speed * dt;
@@ -1759,7 +1789,12 @@ export class World {
       const was = e.seat;
       const p = this.targetOf(e.x, e.y, was);
       e.seat = p.index;
-      if (was !== p.index && this.players.length > 1 && was >= 0) {
+      // Only a switch away from a LIVING seat is a handoff. A seat that died
+      // or respawned teleports, and every enemy near it re-targets at once —
+      // measured at up to 220 "handoffs" per ten seconds, which is a wall of
+      // banner text describing something no player did.
+      if (was !== p.index && this.players.length > 1 && was >= 0
+        && this.players[was]?.alive && p.invul <= 0) {
         const cell = was * 8 + p.index;
         if (cell >= 0 && cell < 64) {
           this.handoffTally[cell] += 1;
@@ -2862,7 +2897,9 @@ export class World {
     const boon = seat.boons.has('hunger') ? BOON.hungerXp : 1;
     const gained = amount * seat.xpMult * boon;
     seat.xp += gained;
-    if (this.players.length > 1 && this.ownsScore(seat)) seat.arenaScore += gained;
+    // One gem, one mass — see MASS.perGem. Experience and score stopped being
+    // the same currency here.
+    if (this.players.length > 1 && this.ownsScore(seat)) seat.arenaScore += MASS.perGem;
   }
 
   /**
@@ -3109,13 +3146,25 @@ export class World {
     p.hp = 0;
     p.alive = false;
     p.diedAt = this.time;
+    let paidOut = 0;
     const claimant =
       this.time - p.lastHitAt <= PVP.claimWindow ? this.players[p.lastHitBy] : undefined;
     if (claimant && claimant !== p && claimant.alive) {
+      /**
+       * The killer's cut comes OUT of the pile, not on top of it.
+       *
+       * It used to be minted: the victim spilled 100% of their mass onto the
+       * floor AND the killer was handed another 20% from nowhere. With ~67
+       * deaths in a five-minute match that compounds, and it did — the local
+       * player's mass reached 245,431, a number that means nothing to anybody.
+       * Mass is now conserved across a kill: the pile is smaller by exactly
+       * what the killer was paid.
+       */
       const bounty = Math.max(40, Math.round(p.arenaScore * PVP.bountyShare));
       // Same rule: whoever owns that seat's mass is already paying this bounty
       // and publishing the result, so adding it here would double-count it
       // until the next packet corrected it back down.
+      paidOut = bounty;
       if (this.ownsScore(claimant)) claimant.arenaScore += bounty;
       claimant.pvpKills++;
       claimant.arenaStreak++;
@@ -3129,9 +3178,29 @@ export class World {
         bounty,
       });
     }
-    if (this.players.length > 1) this.spillArenaMass(p);
-    // A rival dying does not end the run; it changes the standings. Only seat
-    // zero going down ends the game the local player is playing.
+    if (this.players.length > 1) this.spillArenaMass(p, paidOut);
+    p.deaths++;
+
+    /**
+     * In the arena, going down is a cost rather than an ending.
+     *
+     * Everything you were carrying is now on the floor for whoever is standing
+     * there, and you are out of the fight for three seconds. That is the whole
+     * penalty, and it is the right one: it takes the thing you were playing
+     * for without taking your session. A mode where each death permanently
+     * removes a combatant can only shrink, and measured, this one shrank to a
+     * single seat inside two minutes.
+     */
+    if (this.players.length > 1) {
+      p.arenaScore = 0;
+      p.siphonTarget = -1;
+      p.siphonLock = 0;
+      p.respawnIn = ARENA.respawnDelay;
+      return;
+    }
+
+    // Solo keeps the shape it has always had: one life, and the question is
+    // how long you lasted.
     if (p.index !== 0) return;
     if (this.phase === 'dead') return;
     this.phase = 'dead';
@@ -3143,9 +3212,40 @@ export class World {
     });
   }
 
+  /**
+   * Put the dead back in, and end the match when its clock runs out.
+   *
+   * A seat returns with the build it earned and none of the mass — the build
+   * is what you learned to play, the mass is what you were playing for.
+   */
+  private updateRespawns(dt: number): void {
+    for (const p of this.players) {
+      if (p.alive || p.respawnIn <= 0) continue;
+      p.respawnIn -= dt;
+      if (p.respawnIn > 0) continue;
+      p.respawnIn = 0;
+      p.alive = true;
+      p.diedAt = -1;
+      p.hp = p.maxHp * ARENA.respawnHealth;
+      p.arenaScore = ARENA.respawnMass;
+      p.invul = ARENA.respawnInvuln;
+      p.lastHitBy = -1;
+      p.lastHitAt = -999;
+      // Back at the edge of the ring rather than where they fell, so nobody
+      // respawns inside the crowd that just killed them.
+      const a = this.rng.angle();
+      const r = this.arenaRing > 0 ? this.arenaRing * 0.72 : this.viewHalfW * 0.8;
+      p.x = dcos(a) * r;
+      p.y = dsin(a) * r;
+      p.px = p.x;
+      p.py = p.y;
+      this.events.push({ type: 'respawned', seat: p.index, name: p.name });
+    }
+  }
+
   /** Defeat becomes opportunity: loose growth draws everyone into the danger. */
-  private spillArenaMass(p: Player): void {
-    const total = Math.max(12, p.arenaScore * PVP.spillShare);
+  private spillArenaMass(p: Player, alreadyPaid = 0): void {
+    const total = Math.max(12, p.arenaScore * PVP.spillShare - alreadyPaid);
     const count = Math.max(8, Math.min(18, Math.round(total / 18)));
     const each = total / count;
     for (let i = 0; i < count; i++) {

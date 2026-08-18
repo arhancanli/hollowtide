@@ -135,9 +135,27 @@ with sync_playwright() as playwright:
 
     desktop.screenshot(path=str(OUT / "desktop-live.png"))
     mobile.screenshot(path=str(OUT / "mobile-live.png"))
+    # Death in the arena is a three-second cost, not the end of the session —
+    # the match runs on a clock and you come back with your build and no mass.
     desktop.bring_to_front()
+    before_deaths = desktop.evaluate("window.__swarm.getWorld().player.deaths")
     desktop.evaluate("window.__swarm.getWorld().killPlayer()")
-    desktop.wait_for_function("window.__swarm.ui().results === true")
+    desktop.wait_for_function("window.__swarm.getWorld().player.respawnIn > 0")
+    assert desktop.evaluate("window.__swarm.ui().results") is False, "arena death must not end the match"
+    desktop.wait_for_function("window.__swarm.getWorld().player.alive === true", timeout=15000)
+    respawned = desktop.evaluate("""() => {
+      const p = window.__swarm.getWorld().player;
+      return { deaths: p.deaths, mass: Math.round(p.arenaScore), hp: Math.round(p.hp),
+               weapons: p.weapons.length, alive: p.alive };
+    }""")
+    assert respawned["deaths"] == before_deaths + 1, respawned
+    assert respawned["alive"] is True, respawned
+    assert respawned["weapons"] >= 1, ("respawn must keep the build", respawned)
+    assert respawned["mass"] <= 100, ("respawn must cost the mass", respawned)
+
+    # The match still ends — on its clock.
+    desktop.evaluate("window.__swarm.getWorld().time = 299.5")
+    desktop.wait_for_function("window.__swarm.ui().results === true", timeout=20000)
     assert desktop.evaluate("window.__swarm.ui().revive") is False
     arena_record = desktop.evaluate("""() => ({
       runs: window.__swarmMeta.current.arenaRuns,

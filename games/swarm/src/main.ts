@@ -161,6 +161,8 @@ async function boot(): Promise<void> {
   let hit60 = false;
   let adInFlight = false;
   let abilitySent = false;
+  /** Rate limit on horde-handoff calls, in sim seconds. */
+  let lastHandoffCall = -99;
   const setAdInFlight = (busy: boolean, label = 'AD LOADING…'): void => {
     adInFlight = busy;
     adShield.textContent = label;
@@ -586,11 +588,20 @@ async function boot(): Promise<void> {
     const lastAttacker = world.time - world.player.lastHitAt <= 5
       ? world.players[world.player.lastHitBy]
       : undefined;
-    const deathCause = lastAttacker && lastAttacker.index !== 0
-      ? `${(lastAttacker.name || 'A RIVAL').toUpperCase()} CLAIMED YOU`
-      : world.tideDamage > world.player.maxHp * 0.25
-        ? 'THE TIDE TOOK YOU'
-        : 'THE SWARM CLOSED IN';
+    /**
+     * A match does not end because you died — it ends on the clock. So the
+     * line under the result reports how the five minutes went rather than what
+     * killed you, which in a mode with respawns is not even a meaningful
+     * question.
+     */
+    const deathCause = arenaMode
+      ? `${world.player.deaths} DOWN  ·  ${world.player.pvpKills} TAKEN  ·  ` +
+        `${Math.floor(world.player.arenaScore)} MASS`
+      : lastAttacker && lastAttacker.index !== 0
+        ? `${(lastAttacker.name || 'A RIVAL').toUpperCase()} CLAIMED YOU`
+        : world.tideDamage > world.player.maxHp * 0.25
+          ? 'THE TIDE TOOK YOU'
+          : 'THE SWARM CLOSED IN';
     const arenaPlace = world.players.length > 1
       ? world.standings().findIndex((q) => q.index === 0) + 1
       : 0;
@@ -968,6 +979,17 @@ async function boot(): Promise<void> {
         else if (ev.type === 'evolved') analytics.track('evolved', { id: ev.id });
         else if (ev.type === 'bossSpawned') analytics.track('boss_spawned', { name: ev.name });
         else if (ev.type === 'bossKilled') analytics.track('boss_killed');
+        else if (ev.type === 'respawned') {
+          if (ev.seat === 0) hud.announceArena('BACK IN  ·  YOUR MASS IS ON THE FLOOR', 2);
+        }
+        else if (ev.type === 'matchOver') {
+          hud.announceArena(
+            ev.winner === 'YOU'
+              ? `YOU TOOK THE MATCH  ·  ${ev.mass} MASS`
+              : `${ev.winner.toUpperCase()} TOOK THE MATCH  ·  ${ev.mass} MASS`,
+            3,
+          );
+        }
         else if (ev.type === 'handoff') {
           /**
            * You put a horde on somebody, or somebody put one on you.
@@ -980,8 +1002,16 @@ async function boot(): Promise<void> {
            */
           const them = ev.from === 0 ? world.players[ev.to] : world.players[ev.from];
           const who = (them?.name || 'A RIVAL').toUpperCase();
-          if (ev.from === 0) hud.announceArena(`YOU PUT ${ev.count} ON ${who}`, 1);
-          else if (ev.to === 0) hud.announceArena(`${who} PUT ${ev.count} ON YOU`, 1);
+          const now = world.time;
+          if (now - lastHandoffCall > 8) {
+            if (ev.from === 0) {
+              lastHandoffCall = now;
+              hud.announceArena(`YOU PUT ${ev.count} ON ${who}`, 1);
+            } else if (ev.to === 0) {
+              lastHandoffCall = now;
+              hud.announceArena(`${who} PUT ${ev.count} ON YOU`, 1);
+            }
+          }
           analytics.track('rival_down', { handoff: ev.count });
         }
         else if (ev.type === 'rivalDown') {

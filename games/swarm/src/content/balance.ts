@@ -28,9 +28,34 @@
 export const MASS = {
   /** Every seat opens here, and radius is measured against it. */
   base: 100,
-  /** Extra radius per quadrupling of mass. Square-root, not linear: mass can
-   *  run into the thousands late and a linear body would fill the screen. */
-  growth: 0.34,
+  /**
+   * Extra radius per quadrupling of mass. Square-root, not linear: mass runs
+   * into the thousands late and a linear body would fill the screen.
+   *
+   * Retuned for the range mass actually occupies now that a match is five
+   * minutes with respawns and loot. At 0.34 every seat above ~1,160 mass drew
+   * at the cap, so the leader and a mid-table rival were the same size and the
+   * food chain — the entire reason size exists — stopped being readable. 0.15
+   * spreads the visible range across roughly 100 to 5,000.
+   */
+  growth: 0.15,
+  /**
+   * Mass earned per gem picked up — FLAT, regardless of what the gem is worth
+   * in experience.
+   *
+   * Mass used to be experience: arenaScore rose by exactly the XP value of
+   * every pickup. Experience grows superlinearly with the threat tier, so the
+   * score did too — measured at 125,461 by the end of a five-minute match,
+   * doubling every thirty seconds. A number nobody can hold in their head is
+   * not a score.
+   *
+   * A gem is a gem now. Mass counts what you ATE, not how strong it made you,
+   * which keeps the number legible and — more importantly — makes a dead
+   * rival's pile worth hundreds of gems rather than a rounding error. Hunting
+   * people is supposed to pay better than farming, and this is the line that
+   * decides it.
+   */
+  perGem: 1,
   /** A drained seat shrinks, but stays large enough to find on a phone. */
   minScale: 0.85,
   /** And a fat one stays small enough to fit between two enemies. */
@@ -129,6 +154,40 @@ export function seatRadius(mass: number): number {
  *
  * Solo never reaches any of this — the one-seat branch short-circuits above it.
  */
+/**
+ * ARENA — the shape of a multiplayer match, which is NOT the shape of a run.
+ *
+ * Solo is "survive the tide": one life, and the question is how long you last.
+ * Multiplayer had the same shape, and that was the mistake underneath every
+ * other multiplayer problem. One life per player means every death permanently
+ * removes a combatant, so an eight-seat lobby can only ever shrink — measured,
+ * it was down to one seat by 110 seconds and the rest of the match was a solo
+ * farm. No amount of tuning fixes a mode that structurally empties itself.
+ *
+ * So the arena is an .io round instead. You respawn. Death costs you the thing
+ * you were playing for — your mass hits the floor for whoever is standing
+ * there — and three seconds, not your session. The match is a fixed length and
+ * the most mass at the end wins, so there is a winner, a clock, and a reason
+ * for the last thirty seconds to be the tensest part of it.
+ *
+ * The two modes now share a simulation and nothing else. Solo is survival.
+ * Multiplayer is a fight between people, in which the tide is the terrain.
+ */
+export const ARENA = {
+  /** Length of a match. Long enough to build, short enough to requeue. */
+  matchSeconds: 300,
+  /** Seconds on the floor before you are back in it. */
+  respawnDelay: 3,
+  /** Mass you come back with. The rest is on the ground where you died. */
+  respawnMass: 100,
+  /** Breathing room on respawn, so you are not killed as you land. */
+  respawnInvuln: 3,
+  /** Health you return with, as a share of maximum. */
+  respawnHealth: 1,
+  /** Seconds of the match remaining when the endgame call goes out. */
+  finalCall: 30,
+} as const;
+
 export const AGGRO = {
   /**
    * How much closer a challenger must be to steal a chasing enemy, as a
@@ -143,7 +202,7 @@ export const AGGRO = {
    * banner fired 65 times a race, and a celebration that happens every four
    * seconds is wallpaper. A horde arriving should be an event.
    */
-  announce: 24,
+  announce: 40,
   /** Tally decay per second, so a slow trickle never adds up to a moment. */
   decay: 1.4,
 } as const;

@@ -4,6 +4,7 @@ import { ABILITIES } from '../content/abilities.js';
 import type { InputController } from '@arcade/core';
 import type { World } from '../sim/world.js';
 import { threatTierAt } from '../content/waves.js';
+import { ARENA } from '../content/balance.js';
 
 /**
  * Screen-space HUD. Three elements and no more — XP, time, and the health ring
@@ -83,6 +84,8 @@ export class Hud {
   private lastPlace = '';
   private livePlayers = 0;
   private reconnecting = false;
+  /** Seconds left in the match, or -1 in a solo run. */
+  private matchLeft = -1;
 
   /** Number of real people in the arena, including this client. */
   setArenaNetwork(
@@ -373,10 +376,42 @@ export class Hud {
     }
     // Only touch Text when the value actually changed — every assignment
     // retriggers layout, and this runs every frame.
-    const t = formatTime(world.time);
+    /**
+     * The arena counts DOWN.
+     *
+     * A survival run asks how long you lasted, so it counts up. A match has an
+     * end everybody shares, and the last thirty seconds are the tensest part
+     * of it — which only works if the player can see them coming. It also
+     * turns red inside the final call, because a number that changes colour is
+     * read by people who are not reading numbers.
+     */
+    const arena = world.players.length > 1;
+    const left = arena ? Math.max(0, ARENA.matchSeconds - world.time) : 0;
+    const t = arena ? formatTime(left) : formatTime(world.time);
     if (t !== this.lastTime) {
       this.lastTime = t;
       this.timeText.text = t;
+    }
+    if (arena) {
+      const urgent = left <= ARENA.finalCall;
+      const fill = urgent ? 0xff6b7f : 0xe8f0ff;
+      if (this.timeText.style.fill !== fill) this.timeText.style.fill = fill;
+      this.matchLeft = left;
+    } else if (this.matchLeft >= 0) {
+      this.matchLeft = -1;
+      this.timeText.style.fill = 0xe8f0ff;
+    }
+
+    /**
+     * Death is a three-second cost, so it needs a three-second clock.
+     *
+     * Without it the screen simply stops responding and the player assumes the
+     * game has broken — which is what "you are dead but the match continues"
+     * looks like when nothing says so.
+     */
+    const downFor = world.player.respawnIn;
+    if (downFor > 0) {
+      this.announceArena(`DOWN  ·  BACK IN ${Math.ceil(downFor)}`, 3);
     }
     const threatTier = threatTierAt(world.time);
     if (world.level !== this.lastLevel || threatTier !== this.lastThreatTier) {
@@ -457,6 +492,9 @@ export class Hud {
    * own situation outranks routine commentary about somebody else's.
    */
   announceArena(message: string, priority = 0): void {
+    // Priority 3 is the respawn clock, which is re-issued every frame while it
+    // is counting; letting it block itself would freeze the count on screen.
+    if (priority === 3 && this.arenaEventPriority === 3) this.arenaEventT = 0;
     if (priority < this.arenaEventPriority && this.arenaEventT > 0) return;
     this.arenaEvent.text = message;
     this.arenaEventT = priority > 0 ? 4.2 : 2.4;
