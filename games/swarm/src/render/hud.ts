@@ -503,6 +503,18 @@ export class Hud {
    * strangest moment in the mode was gone. A message that explains the player's
    * own situation outranks routine commentary about somebody else's.
    */
+  /**
+   * True while the banner is still showing something.
+   *
+   * Read by the teaching so one lesson never lands on top of another: two
+   * fired two seconds apart gave a new player about two seconds to read the
+   * first, which is not reading. A deferred lesson simply waits for its next
+   * opportunity — every one of them is triggered by a situation that recurs.
+   */
+  get announceBusy(): boolean {
+    return this.arenaEventT > 0;
+  }
+
   announceArena(message: string, priority = 0): void {
     // Priority 3 is the respawn clock, which is re-issued every frame while it
     // is counting; letting it block itself would freeze the count on screen.

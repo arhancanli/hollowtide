@@ -185,6 +185,9 @@ async function boot(): Promise<void> {
    */
   const teach = (id: string, message: string): void => {
     if (meta.hasTaught(id)) return;
+    // Never land on top of another line. Not marked taught, so the lesson
+    // simply waits — every situation that triggers one of these recurs.
+    if (hud.announceBusy) return;
     meta.markTaught(id);
     hud.announceArena(message, 2);
   };
@@ -707,7 +710,19 @@ async function boot(): Promise<void> {
       // player wants at the end is where they placed when they went down.
       arenaPlace,
       arenaSeats: world.players.length,
-      arenaLeader: world.players.length > 1 ? (world.standings()[0]?.name || 'you') : '',
+      /**
+       * The rival the result is measured against — NOT always the leader.
+       *
+       * When you win, the leader is you, so naming the leader produced
+       * "CROWN TAKEN · 3442 CLEAR OF YOU" on the one screen that is supposed
+       * to feel like a victory. Whoever came second is the person you beat.
+       */
+      arenaLeader: (() => {
+        if (world.players.length <= 1) return '';
+        const board = world.standings();
+        const other = board[0]?.index === 0 ? board[1] : board[0];
+        return other?.name || 'the field';
+      })(),
       // Distance to first place, or the margin you won by. Computed from the
       // same standings the board was showing a second ago.
       arenaGap: (() => {
