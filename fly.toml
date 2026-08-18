@@ -1,0 +1,51 @@
+# Hollowtide's arena relay on Fly.
+#
+#   fly auth login          # once, interactively — only you can do this
+#   fly launch --no-deploy --copy-config --name hollowtide-relay
+#   fly deploy
+#   curl https://hollowtide-relay.fly.dev/health
+#
+# Then build the game against it:
+#   VITE_RELAY_URL=wss://hollowtide-relay.fly.dev npm run build
+
+app = "hollowtide-relay"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile.relay"
+
+[env]
+  PORT = "8787"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # A relay that sleeps drops every live match on the floor, and the machine
+  # that wakes up has no memory of the rooms that were in it. This is the one
+  # setting on this page that must not be left at its default.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  # Websockets ride the same HTTP service; Fly terminates TLS and upgrades, so
+  # the client connects to wss:// and the process only ever sees plain ws://.
+  [http_service.concurrency]
+    type = "connections"
+    # Eight seats a room, a few KB/s each. The cap is a backstop against a
+    # single machine being asked to hold more sockets than it can service,
+    # not a capacity estimate.
+    soft_limit = 400
+    hard_limit = 600
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1

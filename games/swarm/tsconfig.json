@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist-types",
+    "rootDir": ".",
+    "noEmit": false,
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src/**/*.ts", "tools/**/*.ts", "vite.config.ts"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/analytics" },
+    { "path": "../../packages/audio" },
+    { "path": "../../packages/juice" },
+    { "path": "../../packages/portal" }
+  ]
+}

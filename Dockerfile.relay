@@ -1,0 +1,40 @@
+# The arena relay, as a production image.
+#
+# Two stages on purpose. The build stage installs the whole workspace because
+# npm workspaces will not resolve otherwise, and that drags in Pixi and the rest
+# of the game — none of which the relay needs. The runtime stage takes the
+# compiled JavaScript and exactly one dependency, so what ships is a few hundred
+# kilobytes of server rather than a copy of the game.
+#
+# It runs plain `node`, not `tsx`, so the runtime has no TypeScript in it.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json tsconfig.base.json ./
+COPY packages ./packages
+COPY games ./games
+COPY tools ./tools
+RUN npm ci --ignore-scripts
+RUN npx tsc -b packages/relay --force
+
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8787
+
+# `ws` is dependency-free, so this is the entire runtime dependency tree.
+COPY --from=build /app/node_modules/ws ./node_modules/ws
+COPY --from=build /app/packages/relay/dist ./dist
+# ESM needs a type declaration next to the code it loads.
+RUN printf '{"type":"module","private":true}' > package.json
+
+EXPOSE 8787
+
+# The relay answers /health with room and player counts. Fly reads it too (see
+# fly.toml), but having it in the image means `docker run` tells the truth as
+# well — the first thing that goes wrong with a relay is that nobody can tell
+# whether it is running or merely listening.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD wget -qO- http://127.0.0.1:8787/health || exit 1
+
+CMD ["node", "dist/relay.js"]

@@ -1,0 +1,30 @@
+{
+  "name": "canli-arcade",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "packages/*",
+    "games/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @arcade/swarm",
+    "build": "npm run build -w @arcade/swarm",
+    "typecheck": "tsc -b --force",
+    "balance": "npm run balance -w @arcade/swarm",
+    "playtest": "npm run playtest -w @arcade/swarm",
+    "deathprobe": "npm run deathprobe -w @arcade/swarm",
+    "arenaprobe": "npm run arenaprobe -w @arcade/swarm",
+    "relay": "npm run relay -w @arcade/relay",
+    "relay:smoke": "tsx tools/relay-smoke.ts",
+    "netprobe": "tsx tools/netprobe.ts",
+    "detguard": "node tools/detguard.mjs",
+    "verify": "npm run detguard && tsc -b --force",
+    "massprobe": "npm run massprobe -w @arcade/swarm"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^8.2.1"
+  }
+}

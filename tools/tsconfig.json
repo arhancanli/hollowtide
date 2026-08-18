@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist-types",
+    "rootDir": "..",
+    "types": ["node"]
+  },
+  "include": ["*.ts"],
+  "references": [
+    { "path": "../packages/core" },
+    { "path": "../packages/relay" },
+    { "path": "../games/swarm" }
+  ]
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover + no user scaling: a pinch-zoom mid-swarm is a lost run -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#080b14" />
+    <title>Hollowtide — survive the endless tide</title>
+    <!--
+      The name is a search decision, not a flourish. "Swarm" is a generic word
+      that collides with everything in portal search, and the six existing
+      "X Survivors" titles on this shelf are precisely who we do NOT want to be
+      confused with. The internal package stays `swarm` — renaming directories
+      would touch the workspace, the build and every import for zero player-
+      facing gain.
+    -->
+    <meta
+      name="description"
+      content="Hollowtide — a lone survivor against an endless tide. Seven weapons, seven evolutions, six characters each with their own ability, and ten boss fights. Free, no download."
+    />
+    <meta property="og:title" content="Hollowtide" />
+    <meta property="og:description" content="Survive the endless tide. Free browser roguelite." />
+    <meta property="og:type" content="website" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #080b14;
+        /* Kill pull-to-refresh and rubber-banding — both eat drags meant for the stick. */
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-types/
+*.tsbuildinfo
+.vercel/
+.DS_Store
+.vercel
+# Build artifact: regenerated from dist/ by the release step.
+*.zip

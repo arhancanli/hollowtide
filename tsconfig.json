@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/analytics" },
+    { "path": "./packages/audio" },
+    { "path": "./packages/juice" },
+    { "path": "./packages/portal" },
+    { "path": "./packages/relay" },
+    { "path": "./games/swarm" },
+    { "path": "./tools" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@arcade/relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "relay": "tsx src/relay.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}
