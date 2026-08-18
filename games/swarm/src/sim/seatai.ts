@@ -1,4 +1,4 @@
-import { Rng, dcos, dhypot, dsin } from '@arcade/core';
+import { Rng, TAU, datan2, dcos, dhypot, dsin } from '@arcade/core';
 import type { Player, SeatBrain, World } from './world.js';
 import type { WeaponInstance } from './types.js';
 import type { Card } from '../content/upgrades.js';
@@ -97,11 +97,56 @@ export class RivalBrain implements SeatBrain {
     const errs = this.rng.next() < this.profile.mistake;
 
     if (danger >= 3 && n > 0 && !errs) {
-      const dx = seat.x - cx / n;
-      const dy = seat.y - cy / n;
-      const d = dhypot(dx, dy) || 1;
-      this.moveX = dx / d;
-      this.moveY = dy / d;
+      /**
+       * Escape toward the emptiest arc — NOT away from the centre of the crowd.
+       *
+       * Running from the centroid is the obvious thing and it is fatal here,
+       * because in a survivor-like the crowd surrounds you: the centroid of a
+       * ring is the middle of the ring, which is where you are standing. The
+       * escape vector collapses to nothing, the seat stops moving, and it is
+       * eaten where it stands.
+       *
+       * Measured before this: rival lifetimes were p10 27s, median 31s, p90
+       * 39s — an entire eight-seat lobby evaporating inside one twelve-second
+       * window, at no particular difficulty event, simply as soon as the swarm
+       * was dense enough to close a circle. Seven of the eight combatants in a
+       * mode built around eight combatants were gone before the first boss.
+       *
+       * A person does not run from the middle of the crowd, they run at the
+       * gap. This scores twelve headings by how much danger lies along each and
+       * takes the quietest one, which is the same thing.
+       */
+      const ESCAPES = 12;
+      let bestScore = Infinity;
+      let bestX = this.moveX;
+      let bestY = this.moveY;
+      const horizon = nerve + 90;
+      for (let i = 0; i < ESCAPES; i++) {
+        const a = (i / ESCAPES) * TAU;
+        const ax = dcos(a);
+        const ay = dsin(a);
+        let score = 0;
+        for (const e of world.enemies.active) {
+          if (e.hp <= 0) continue;
+          const ex = e.x - seat.x;
+          const ey = e.y - seat.y;
+          const d = dhypot(ex, ey);
+          if (d > horizon) continue;
+          // Only what lies AHEAD of this heading counts against it, weighted by
+          // how directly ahead and how close it is.
+          const along = (ex * ax + ey * ay) / (d || 1);
+          if (along <= 0.15) continue;
+          score += along * (1 - d / horizon);
+        }
+        if (score < bestScore) {
+          bestScore = score;
+          bestX = ax;
+          bestY = ay;
+        }
+      }
+      this.moveX = bestX;
+      this.moveY = bestY;
+      this.heading = datan2(bestY, bestX);
       if (danger >= 4 && seat.abilityCd <= 0) world.useAbility(seat);
       return;
     }

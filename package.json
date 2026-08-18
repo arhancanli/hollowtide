@@ -19,7 +19,8 @@
     "netprobe": "tsx tools/netprobe.ts",
     "detguard": "node tools/detguard.mjs",
     "verify": "npm run detguard && tsc -b --force",
-    "massprobe": "npm run massprobe -w @arcade/swarm"
+    "massprobe": "npm run massprobe -w @arcade/swarm",
+    "pacingprobe": "npm run pacingprobe -w @arcade/swarm"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

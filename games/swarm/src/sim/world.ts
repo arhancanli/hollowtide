@@ -173,8 +173,30 @@ export const ARENA_RING = {
 } as const;
 
 const PVP = {
-  scale: 0.02,
-  flat: 2,
+  /**
+   * What a shot is worth against a person, and why it is now so small.
+   *
+   * These two numbers, not maxShare, are what actually set PvP damage: the
+   * bite is min(maxShare * maxHp, flat + rawDamage * scale), and the cap only
+   * binds above about four. Halving maxShare three times therefore changed
+   * nothing measurable, which is exactly the sort of dial that looks tuned and
+   * is inert.
+   *
+   * They were 2 and 0.02, and at that setting an eight-seat lobby destroyed
+   * itself: 130 of 130 rival deaths in a 40-run sample came from another
+   * combatant's weapon fire and ZERO from the swarm, with a median lifetime of
+   * 30 seconds and the whole field gone inside one twelve-second window. In a
+   * survivor-like, the swarm killing nobody is the plot being lost.
+   *
+   * At 0.5 and 0.005, with damage also gated on engagement (see hitRival):
+   * median rival lifetime 150s against a competent human's 160s solo, deaths
+   * spread from 104s to 198s instead of arriving all at once, and the swarm
+   * accounts for a fifth of them. A duel still resolves in seconds against
+   * somebody the swarm has already opened up — which is precisely when the
+   * siphon wants you to attack.
+   */
+  scale: 0.005,
+  flat: 0.5,
   maxShare: 0.08,
   /** Longer than a monster's, so nobody is chain-shot out of a bad position. */
   iframes: 0.45,
@@ -2313,7 +2335,25 @@ export class World {
     return best;
   }
 
+  /**
+   * A shot lands on the person you are actually fighting — and nobody else.
+   *
+   * Measured before this rule existed: 130 of 130 rival deaths in a 40-run
+   * sample were caused by another combatant's weapon fire, and ZERO by the
+   * swarm. Every seat's auto-firing area weapons were shredding every other
+   * seat simply because eight bodies share one screen, so an eight-player
+   * lobby wiped itself out by the thirty-second mark with nobody having chosen
+   * to fight anybody. A survivor-like in which the swarm kills nobody has lost
+   * the plot.
+   *
+   * So friendly fire is not a thing that happens to you. You engage somebody —
+   * you stay near them, the lock builds, the thread appears — and only then do
+   * your weapons touch them. It is the same commitment the siphon asks for,
+   * and it makes hurting a person an act rather than a side effect of standing
+   * somewhere.
+   */
   private hitRival(owner: Player, target: Player, rawDamage: number): void {
+    if (owner.siphonTarget !== target.index) return;
     const bite = Math.min(target.maxHp * PVP.maxShare, PVP.flat + rawDamage * PVP.scale);
     this.pvpHits++;
     target.lastHitBy = owner.index;
@@ -2368,21 +2408,24 @@ export class World {
        */
       const aFrac = a.hp / Math.max(1, a.maxHp);
       const held = a.siphonTarget >= 0 ? this.players[a.siphonTarget] : undefined;
-      let target: Player | null = held && this.canSiphon(a, held, aFrac) ? held : null;
-      let bestGap = target ? aFrac - target.hp / Math.max(1, target.maxHp) : 0;
+      let target: Player | null = held && this.inReach(a, held) ? held : null;
       if (!target) {
         let bestD2 = Infinity;
         for (const b of this.players) {
-          if (b === a || !this.canSiphon(a, b, aFrac)) continue;
+          if (b === a || !this.inReach(a, b)) continue;
           const dx = b.x - a.x;
           const dy = b.y - a.y;
           const d2 = dx * dx + dy * dy;
           if (d2 >= bestD2) continue;
           bestD2 = d2;
-          bestGap = aFrac - b.hp / Math.max(1, b.maxHp);
           target = b;
         }
       }
+      // Engagement is about who you are ON, not who is weak — the health gap
+      // decides whether mass flows, further down. Gating engagement itself on
+      // health was circular: you needed them hurt to lock, and needed to lock
+      // to hurt them.
+      const bestGap = target ? aFrac - target.hp / Math.max(1, target.maxHp) : 0;
 
       if (!target) {
         // Lapses are recoverable — a moment of separation should not throw away
@@ -2398,9 +2441,12 @@ export class World {
         a.siphonTarget = target.index;
         a.siphonLock = 0;
       }
-      const ramp = SIPHON.opening
-        + (1 - SIPHON.opening) * (a.siphonLock / SIPHON.lockFull);
-      this.drain(target, a, bestGap * ramp, dt, a.siphonLock / SIPHON.lockFull);
+      // Mass only moves if you are actually winning the exchange.
+      if (bestGap > SIPHON.deadband && target.arenaScore > SIPHON.floor) {
+        const ramp = SIPHON.opening
+          + (1 - SIPHON.opening) * (a.siphonLock / SIPHON.lockFull);
+        this.drain(target, a, bestGap * ramp, dt, a.siphonLock / SIPHON.lockFull);
+      }
     }
   }
 
@@ -2413,11 +2459,9 @@ export class World {
    * beneficiary's client adds. See World.applySeatRecord for the ownership
    * rule this follows.
    */
-  /** Is `b` a rival `a` can currently take mass from? */
-  private canSiphon(a: Player, b: Player, aFrac: number): boolean {
+  /** Close enough to be engaged with. */
+  private inReach(a: Player, b: Player): boolean {
     if (b === a || !b.alive) return false;
-    if (b.arenaScore <= SIPHON.floor) return false;
-    if (aFrac - b.hp / Math.max(1, b.maxHp) <= SIPHON.deadband) return false;
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const reach = SIPHON.radius + seatRadius(a.arenaScore) + seatRadius(b.arenaScore);
@@ -2764,7 +2808,7 @@ export class World {
     g.age = 0;
   }
 
-  private spawnGem(x: number, y: number, value: number): void {
+  private spawnGem(x: number, y: number, value: number, loot = false): void {
     // Merge rather than discard once the pool is crowded. Dropping the gem on
     // the floor meant kills stopped paying entirely in the late game.
     if (this.gems.count >= this.gems.capacity * GEM.mergeAbove) {
@@ -2773,6 +2817,9 @@ export class World {
       let bestD2 = GEM.mergeRadius * GEM.mergeRadius;
       for (let i = 0; i < list.length; i++) {
         const g0 = list[i]!;
+        // Never merge loot into experience or the other way round — they pay
+        // different currencies and a merged gem could only pay one of them.
+        if (g0.loot !== loot || g0.heal > 0) continue;
         const dx = g0.x - x;
         const dy = g0.y - y;
         const d2 = dx * dx + dy * dy;
@@ -2799,6 +2846,7 @@ export class World {
     g.vy = dsin(a) * s;
     g.value = value;
     g.heal = 0;
+    g.loot = loot;
     g.homing = false;
     g.age = 0;
   }
@@ -2980,6 +3028,11 @@ export class World {
           const before = p.hp;
           p.hp = Math.min(p.maxHp, p.hp + g.heal);
           if (p.index === 0) this.events.push({ type: 'healed', amount: Math.round(p.hp - before) });
+        } else if (g.loot) {
+          // A fallen player's mass. Score and size, never experience — see
+          // Gem.loot. Whoever owns this seat's score is the one who banks it.
+          if (this.ownsScore(p)) p.arenaScore += g.value;
+          if (p.index === 0) this.events.push({ type: 'gemCollected', value: g.value });
         } else {
           this.gainXp(g.value, p);
           if (p.index === 0) this.events.push({ type: 'gemCollected', value: g.value });
@@ -3098,7 +3151,7 @@ export class World {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * TAU + this.rng.range(-0.12, 0.12);
       const r = this.rng.range(12, 52);
-      this.spawnGem(p.x + dcos(a) * r, p.y + dsin(a) * r, each);
+      this.spawnGem(p.x + dcos(a) * r, p.y + dsin(a) * r, each, true);
     }
   }
 
@@ -3585,11 +3638,15 @@ function resetProjectile(p: Projectile): void {
 }
 
 function makeGem(): Gem {
-  return { x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, value: 0, heal: 0, homing: false, age: 0 };
+  return {
+    x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0,
+    value: 0, heal: 0, loot: false, homing: false, age: 0,
+  };
 }
 function resetGem(g: Gem): void {
   g.value = 0;
   g.heal = 0;
+  g.loot = false;
   g.homing = false;
   g.vx = 0;
   g.vy = 0;

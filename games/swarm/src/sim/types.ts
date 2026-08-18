@@ -99,6 +99,16 @@ export interface Gem {
    * a second pool would have to duplicate every one of them.
    */
   heal: number;
+  /**
+   * True for the mass that spills out of a fallen player.
+   *
+   * It pays MASS ONLY — no experience. Measured with it paying experience like
+   * an ordinary gem: a 100% shatter turned every elimination into an XP
+   * fountain, the winner became unkillable by 50 seconds, and the last three
+   * minutes of a run were a solo farm in total safety. Score and power are the
+   * same currency in this game, so loot has to opt out of one of them.
+   */
+  loot: boolean;
   /** Latches true once in range, so gems never un-magnetise mid-flight. */
   homing: boolean;
   /** Seconds since drop. Older gems chase harder — see GEM in balance.ts. */

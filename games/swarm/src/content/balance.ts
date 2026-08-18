@@ -136,8 +136,14 @@ export const AGGRO = {
    * all; lower is harder to steal.
    */
   handoff: 0.62,
-  /** Enemies that must change hands between one pair before it is announced. */
-  announce: 10,
+  /**
+   * Enemies that must change hands between one pair before it is announced.
+   *
+   * Raised from 10 once runs started lasting their full length: at 10 the
+   * banner fired 65 times a race, and a celebration that happens every four
+   * seconds is wallpaper. A horde arriving should be an event.
+   */
+  announce: 24,
   /** Tally decay per second, so a slow trickle never adds up to a moment. */
   decay: 1.4,
 } as const;

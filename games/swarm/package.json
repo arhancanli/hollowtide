@@ -11,7 +11,8 @@
     "playtest": "tsx tools/playtest.ts",
     "deathprobe": "tsx tools/deathprobe.ts",
     "arenaprobe": "tsx tools/arenaprobe.ts",
-    "massprobe": "tsx tools/massprobe.ts"
+    "massprobe": "tsx tools/massprobe.ts",
+    "pacingprobe": "tsx tools/pacingprobe.ts"
   },
   "dependencies": {
     "@arcade/core": "*",
