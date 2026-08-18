@@ -111,6 +111,37 @@ export function seatRadius(mass: number): number {
   return PLAYER.radius * Math.max(MASS.minScale, Math.min(MASS.maxScale, scale));
 }
 
+/**
+ * AGGRO — who the swarm is chasing, and how hard it is to change its mind.
+ *
+ * Enemies used to re-pick the nearest combatant every single step, with a
+ * comment explaining why: sticky aggro would let two players stand a metre
+ * apart and cleanly halve the swarm between them, making the arena easier the
+ * more people are in it. That warning is right and this has to respect it.
+ *
+ * So the swarm still goes to whoever is nearest — it just takes a real
+ * difference to turn its head. A challenger has to be meaningfully closer than
+ * the combatant it is already chasing, which changes nothing about where a
+ * crowd settles and everything about the transient: you can gather a horde,
+ * carry it, and put it on somebody. Killing a player without ever shooting at
+ * them is the deepest thing two people can do to each other in a game whose
+ * only verb is movement.
+ *
+ * Solo never reaches any of this — the one-seat branch short-circuits above it.
+ */
+export const AGGRO = {
+  /**
+   * How much closer a challenger must be to steal a chasing enemy, as a
+   * fraction of the current target's distance. 1.0 would be no stickiness at
+   * all; lower is harder to steal.
+   */
+  handoff: 0.62,
+  /** Enemies that must change hands between one pair before it is announced. */
+  announce: 10,
+  /** Tally decay per second, so a slow trickle never adds up to a moment. */
+  decay: 1.4,
+} as const;
+
 export const PLAYER = {
   /**
    * 120, and 0.65s of invulnerability.

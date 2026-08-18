@@ -968,6 +968,22 @@ async function boot(): Promise<void> {
         else if (ev.type === 'evolved') analytics.track('evolved', { id: ev.id });
         else if (ev.type === 'bossSpawned') analytics.track('boss_spawned', { name: ev.name });
         else if (ev.type === 'bossKilled') analytics.track('boss_killed');
+        else if (ev.type === 'handoff') {
+          /**
+           * You put a horde on somebody, or somebody put one on you.
+           *
+           * Announced because it is otherwise invisible: forty enemies quietly
+           * changing their minds looks exactly like forty enemies. This is the
+           * only feedback teaching the deepest interaction in the mode — that
+           * you can kill a person without ever shooting at them — so it has to
+           * be said out loud the first time it happens.
+           */
+          const them = ev.from === 0 ? world.players[ev.to] : world.players[ev.from];
+          const who = (them?.name || 'A RIVAL').toUpperCase();
+          if (ev.from === 0) hud.announceArena(`YOU PUT ${ev.count} ON ${who}`, 1);
+          else if (ev.to === 0) hud.announceArena(`${who} PUT ${ev.count} ON YOU`, 1);
+          analytics.track('rival_down', { handoff: ev.count });
+        }
         else if (ev.type === 'rivalDown') {
           hud.announceArena(`${ev.killer.toUpperCase()} TOOK ${ev.name.toUpperCase()}  +${ev.bounty}`);
           analytics.track('rival_down', { rival: ev.name, bounty: ev.bounty });

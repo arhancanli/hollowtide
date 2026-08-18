@@ -183,6 +183,8 @@ export type SimEvent =
   | { type: 'levelUp'; level: number }
   | { type: 'died'; time: number; level: number; kills: number }
   | { type: 'rivalDown'; x: number; y: number; name: string; killer: string; bounty: number }
+  /** A batch of enemies changed which combatant they are chasing. */
+  | { type: 'handoff'; from: number; to: number; count: number; x: number; y: number }
   | { type: 'revived' }
   | { type: 'eliteSpawned' }
   | { type: 'heraldSpawned' }

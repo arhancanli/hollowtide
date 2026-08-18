@@ -13,6 +13,7 @@ import {
   ENEMIES,
   GEM,
   HEALTH_DROP,
+  AGGRO,
   OPENING,
   PLAYER,
   SIPHON,
@@ -1085,6 +1086,12 @@ export class World {
     if (this.players.length > 1) {
       this.updateArenaRing(dt);
       this.updateSiphon(dt);
+      const bleed = AGGRO.decay * dt;
+      for (let i = 0; i < 64; i++) {
+        if (this.handoffTally[i]! > 0) {
+          this.handoffTally[i] = Math.max(0, this.handoffTally[i]! - bleed);
+        }
+      }
     }
 
     this.compactEnemies();
@@ -1675,12 +1682,27 @@ export class World {
    * short-circuits to that seat and the arithmetic is exactly what the
    * single-player build did, which is what keeps solo runs reproducible.
    */
-  private targetOf(x: number, y: number): Player {
+  private targetOf(x: number, y: number, current = -1): Player {
     if (this.players.length === 1) return this.players[0]!;
+
+    /**
+     * The enemy keeps chasing whoever it is chasing until somebody is
+     * MEANINGFULLY closer — see AGGRO.handoff for why that threshold exists
+     * and what it is protecting against.
+     */
+    const held = current >= 0 ? this.players[current] : undefined;
     let best = this.players[0]!;
     let bestD = Infinity;
+    if (held && held.alive) {
+      const hx = held.x - x;
+      const hy = held.y - y;
+      best = held;
+      // Inflated: a challenger has to beat the held target by this margin, not
+      // merely tie it.
+      bestD = (hx * hx + hy * hy) * AGGRO.handoff * AGGRO.handoff;
+    }
     for (const p of this.players) {
-      if (!p.alive) continue;
+      if (!p.alive || p === held) continue;
       const dx = p.x - x;
       const dy = p.y - y;
       const d = dx * dx + dy * dy;
@@ -1692,6 +1714,15 @@ export class World {
     return best;
   }
 
+  /**
+   * Enemies that have changed hands recently, per (from, to) pair.
+   *
+   * Decays continuously so a slow trickle of ones never accumulates into a
+   * celebration — an announcement should mean a horde arrived, not that two
+   * players walked past each other for a minute.
+   */
+  private readonly handoffTally = new Float64Array(64);
+
   private updateEnemies(dt: number): void {
     const list = this.enemies.active;
     const cull2 = WORLD.cullRadius * WORLD.cullRadius;
@@ -1700,11 +1731,29 @@ export class World {
       const e = list[i]!;
       if (e.hp <= 0) continue;
 
-      // Re-target every step. Enemies that stuck to one combatant would let two
-      // players stand a metre apart and split the swarm cleanly in half, which
-      // makes the arena easier the more people are in it — exactly backwards.
-      const p = this.targetOf(e.x, e.y);
+      // Whoever is nearest still wins the swarm — it just takes a real
+      // difference to turn its head, which is what makes a horde something you
+      // can carry and put on somebody. See AGGRO.
+      const was = e.seat;
+      const p = this.targetOf(e.x, e.y, was);
       e.seat = p.index;
+      if (was !== p.index && this.players.length > 1 && was >= 0) {
+        const cell = was * 8 + p.index;
+        if (cell >= 0 && cell < 64) {
+          this.handoffTally[cell] += 1;
+          if (this.handoffTally[cell] >= AGGRO.announce) {
+            this.handoffTally[cell] = 0;
+            this.events.push({
+              type: 'handoff',
+              from: was,
+              to: p.index,
+              count: AGGRO.announce,
+              x: e.x,
+              y: e.y,
+            });
+          }
+        }
+      }
 
       e.px = e.x;
       e.py = e.y;

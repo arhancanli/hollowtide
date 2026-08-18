@@ -35,6 +35,9 @@ let shatterGems = 0;
 const lockSamples: number[] = [];
 let fullLock = 0;
 let targetSwitches = 0;
+let handoffEvents = 0;
+let privacySum = 0;
+let privacyN = 0;
 const peakMass: number[] = [];
 const finalSpread: number[] = [];
 const fatDeaths: Array<{ rank: number; died: boolean }> = [];
@@ -114,6 +117,34 @@ for (let run = 0; run < RUNS; run++) {
         downs++;
         sawShatter = true;
       }
+      if (ev.type === 'handoff') handoffEvents++;
+    }
+
+    /**
+     * The failure the old "re-target every step" comment warned about: sticky
+     * aggro letting each player keep a private swarm, which makes the arena
+     * EASIER the more people are in it. Measured as: of the enemies near a
+     * seat, what share are actually chasing that seat? Near 100% means the
+     * swarm has split into separate fights.
+     */
+    if (step % 30 === 0) {
+      for (const seat of world.players) {
+        if (!seat.alive) continue;
+        let near = 0;
+        let mine = 0;
+        for (const e of world.enemies.active) {
+          if (e.hp <= 0) continue;
+          const dx = e.x - seat.x;
+          const dy = e.y - seat.y;
+          if (dx * dx + dy * dy > 300 * 300) continue;
+          near++;
+          if (e.seat === seat.index) mine++;
+        }
+        if (near >= 8) {
+          privacySum += mine / near;
+          privacyN++;
+        }
+      }
     }
     world.clearEvents();
     shatterGems = Math.max(shatterGems, world.gems.count);
@@ -151,6 +182,9 @@ console.log(`  mass TAKEN off other players          ${siphonedMass.toFixed(0)}`
 console.log(`  median lock strength while draining   ${(median(lockSamples) * 100).toFixed(0)}%`);
 console.log(`  drains at FULL lock                   ${pct(fullLock, lockSamples.length)}`);
 console.log(`  target switches per race              ${(targetSwitches / RUNS).toFixed(0)}`);
+console.log(`  HORDE HANDOFFS announced per race     ${(handoffEvents / RUNS).toFixed(1)}`);
+console.log(`  share of a seat's nearby swarm that   ${(100 * privacySum / Math.max(1, privacyN)).toFixed(0)}%`);
+console.log(`    is actually chasing that seat        (100% = the swarm has split into private fights)`);
 console.log(`  ...as a share of all mass gained      ${pct(siphonedMass, earnedMass)}`);
 console.log(`  body at median peak mass              ${seatRadius(median(peakMass)).toFixed(1)}px ` +
   `(${(seatRadius(median(peakMass)) / seatRadius(MASS.base)).toFixed(2)}x base)`);

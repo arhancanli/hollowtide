@@ -431,20 +431,43 @@ async function fourWay(): Promise<void> {
 
     // Now the real question, with the fight frozen and the packets landed.
     await settle(clients, 700);
-    let settledSplit = 0;
-    const settledBoards: string[] = [];
+    /**
+     * ORDER must be identical; the last unit of mass need not be.
+     *
+     * Mass used to change only in discrete, synchronized events, so every
+     * client held byte-identical numbers. The siphon made it a continuously
+     * varying quantity that each machine integrates for the seats it owns, so
+     * two clients now legitimately differ by a fraction of a unit — below the
+     * precision anything on screen displays. What a player is actually shown is
+     * the ORDER, and that has to be exact.
+     */
+    const orders: string[] = [];
+    const masses: number[][] = [];
     for (const c of clients) {
-      settledBoards.push(
-        c.world.standings().map((p) => `${p.seatId}:${Math.round(p.arenaScore)}`).join(' '),
-      );
+      const board = c.world.standings();
+      orders.push(board.map((p) => p.seatId).join(' '));
+      masses.push(board.map((p) => p.arenaScore));
     }
-    for (const b of settledBoards) if (b !== settledBoards[0]) settledSplit++;
-    notes.push(`${S}: settled board, seat:mass in order — ${settledBoards[0]}`);
+    const orderSplit = orders.filter((o) => o !== orders[0]).length;
+    let worstMass = 0;
+    for (const row of masses) {
+      for (let i = 0; i < row.length; i++) {
+        worstMass = Math.max(worstMass, Math.abs((row[i] ?? 0) - (masses[0]?.[i] ?? 0)));
+      }
+    }
+    notes.push(`${S}: settled order — ${orders[0]}`);
+    notes.push(`${S}: worst mass difference between clients after settling — ${worstMass.toFixed(2)}`);
     check(
       S,
-      settledSplit === 0,
-      `with the fight frozen and every packet delivered, ${settledSplit} of ${clients.length} clients ` +
-        `still hold a different scoreboard:\n      ${settledBoards.join('\n      ')}`,
+      orderSplit === 0,
+      `with the fight frozen and every packet delivered, ${orderSplit} of ${clients.length} clients ` +
+        `still show a different ORDER:\n      ${orders.join('\n      ')}`,
+    );
+    check(
+      S,
+      worstMass < 2,
+      `clients disagree about a seat's mass by ${worstMass.toFixed(2)} after settling — ` +
+        'that is beyond rounding and means the halves of a transfer are not matching',
     );
 
     // Phantom eliminations: A says B died; B says B is alive.
