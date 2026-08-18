@@ -1,5 +1,8 @@
 # canli-arcade
 
+> **Source-available, not open source.** Published to be read; see [LICENSE](LICENSE).
+> Reuploading the game to a portal is not permitted.
+
 Portal-games ecosystem. Target: CrazyGames first, then Poki / GameDistribution /
 Yandex, then own domain.
 
