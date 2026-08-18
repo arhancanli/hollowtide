@@ -680,6 +680,27 @@ export class View {
     // orphaned label sitting in the world.
     // Seats can arrive out of order, leaving sparse slots in this array.
     for (const t of this.rivalNames) if (t) t.visible = false;
+    /**
+     * Where a name has already been written this frame.
+     *
+     * Seats overlap constantly in this arena — the median distance to your
+     * nearest rival is negative — so six labels regularly land on top of each
+     * other and resolve into a smear that names nobody. A label that cannot be
+     * read is worse than no label, because it costs the same screen space and
+     * hides what is underneath it.
+     *
+     * Live players and the leader are always written; everyone else is written
+     * only where there is room. That ordering is the point: the two names worth
+     * the pixels are the person you are actually playing against and the seat
+     * you are trying to catch.
+     */
+    const placed: Array<{ x: number; y: number }> = [];
+    const hasRoom = (x: number, y: number): boolean => {
+      for (const p0 of placed) {
+        if (Math.abs(p0.x - x) < 62 && Math.abs(p0.y - y) < 13) return false;
+      }
+      return true;
+    };
     if (world.players.length > 1) {
       for (const q of world.players) {
         if (q.index === 0 || !q.alive) continue;
@@ -753,7 +774,9 @@ export class View {
         if (label.text !== q.name) label.text = q.name;
         label.x = rx;
         label.y = ry + body * 2.5;
-        label.visible = true;
+        const mustShow = q.live || q.index === arenaLeader;
+        label.visible = mustShow || hasRoom(label.x, label.y);
+        if (label.visible) placed.push({ x: label.x, y: label.y });
         // Live names sit in the same green as their ring, so the marker on the
         // body and the marker on the leaderboard are recognisably one thing.
         label.tint = q.live ? 0x8affc1 : rtint;
