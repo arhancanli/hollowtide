@@ -58,6 +58,14 @@ export interface ResultsData {
   arenaSeats: number;
   /** Who was leading when the run ended. Empty in a solo run. */
   arenaLeader: string;
+  /**
+   * Mass between you and first place — or your margin, if you took it.
+   *
+   * The single most important number on this screen. "2nd of 8" is a fact;
+   * "2nd, 140 behind palecrow" is a reason to press the button again, and the
+   * button is what the whole mode is measured on.
+   */
+  arenaGap: number;
   arenaScore: number;
   pvpKills: number;
   arenaStreak: number;
@@ -743,11 +751,19 @@ export class ResultsScreen {
     // so it takes the line directly under the clock.
     if (data.arenaMode && data.arenaPlace > 0) {
       const won = data.arenaPlace === 1;
-      this.bestText.text = `${Math.floor(data.arenaScore)} MASS  ·  ${data.pvpKills} RIVAL${data.pvpKills === 1 ? '' : 'S'} DOWN`;
+      this.bestText.text = `${Math.floor(data.arenaScore)} MASS  ·  ${data.deathCause}`;
       this.bestText.style.fill = won ? 0xffd166 : 0xc08cff;
+      // The gap, named. A number with a person attached to it is a rematch;
+      // a placing on its own is a receipt.
+      const rival = (data.arenaLeader || 'THE LEADER').toUpperCase();
+      const gap = Math.max(0, Math.round(data.arenaGap));
       this.deathText.text = won
-        ? `CROWN TAKEN  ·  ${mmss(data.time)}`
-        : `${ordinalOf(data.arenaPlace)} OF ${data.arenaSeats}  ·  ${data.deathCause}`;
+        ? gap > 0
+          ? `CROWN TAKEN  ·  ${gap} CLEAR OF ${rival}`
+          : 'CROWN TAKEN'
+        : gap > 0
+          ? `${ordinalOf(data.arenaPlace)} OF ${data.arenaSeats}  ·  ${gap} BEHIND ${rival}`
+          : `${ordinalOf(data.arenaPlace)} OF ${data.arenaSeats}`;
     } else {
       this.bestText.text = data.isBest ? 'NEW BEST' : `BEST  ${mmss(data.bestTime)}`;
       this.bestText.style.fill = data.isBest ? 0xffd166 : 0x8195ba;

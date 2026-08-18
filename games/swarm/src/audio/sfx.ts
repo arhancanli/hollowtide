@@ -97,6 +97,59 @@ export class Sfx {
           break;
         }
 
+        /**
+         * Your own death, in a mode where death is a cost rather than an end.
+         *
+         * Deliberately NOT the 'died' sting, which is a run ending. This is a
+         * heavy downward drop — you lost everything you were carrying — that
+         * resolves rather than trails off, because you are coming back in three
+         * seconds and the sound has to leave room for that.
+         */
+        case 'respawned': {
+          if (ev.seat !== 0) break;
+          this.engine.chord([146.83, 220, 293.66], {
+            type: 'triangle', attack: 0.006, decay: 0.5, gain: 0.12,
+          });
+          this.engine.tone({
+            freq: 587.33, endFreq: 880, type: 'sine',
+            attack: 0.01, decay: 0.34, gain: 0.09,
+          });
+          break;
+        }
+
+        /** The clock running out. The last thing a match says. */
+        case 'matchOver': {
+          this.engine.chord([261.63, 392, 523.25, 783.99], {
+            type: 'triangle', attack: 0.01, decay: 1.1, gain: 0.15,
+          });
+          this.engine.noise({
+            duration: 0.7, gain: 0.08, filterFreq: 3200, filterEndFreq: 300,
+            type: 'bandpass', q: 0.8,
+          });
+          break;
+        }
+
+        /**
+         * A horde changing hands. Rate-limited hard: the sim reports these far
+         * more often than the banner shows them, and a celebration you hear
+         * every few seconds stops being one.
+         */
+        case 'handoff': {
+          if (ev.from !== 0 && ev.to !== 0) break;
+          if (!this.limiter.allow('handoff', nowMs, 4000)) break;
+          const mine = ev.from === 0;
+          this.engine.noise({
+            duration: 0.36, gain: 0.09,
+            filterFreq: mine ? 700 : 2400, filterEndFreq: mine ? 2600 : 500,
+            type: 'bandpass', q: 1.1,
+          });
+          this.engine.tone({
+            freq: mine ? 330 : 220, endFreq: mine ? 494 : 165, type: 'triangle',
+            attack: 0.008, decay: 0.3, gain: 0.08,
+          });
+          break;
+        }
+
         case 'rivalDown': {
           this.engine.chord([196, 293.66, 392, 587.33], {
             type: 'triangle', attack: 0.004, decay: 0.58, gain: 0.13,

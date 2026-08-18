@@ -84,6 +84,8 @@ export class Hud {
   private lastPlace = '';
   private livePlayers = 0;
   private reconnecting = false;
+  /** False while a panel owns the screen. See setPlayVisible. */
+  private playVisible = true;
   /** Seconds left in the match, or -1 in a solo run. */
   private matchLeft = -1;
 
@@ -299,6 +301,16 @@ export class Hud {
   }
 
   setPlayVisible(visible: boolean): void {
+    /**
+     * Remembered, because hiding once is not enough.
+     *
+     * `update()` runs every frame whether a panel owns the screen or not, and
+     * both the leaderboard and the arena banner set their own visibility while
+     * drawing — so they reappeared on the frame after this was called and sat
+     * on top of the results screen. Screenshotted: the live DOMINANCE board
+     * drawn over the final standings it had just been replaced by.
+     */
+    this.playVisible = visible;
     this.abilityButton.visible = visible;
     this.abilityHint.visible = visible && this.teachAbility;
     this.xpBar.visible = visible;
@@ -371,7 +383,7 @@ export class Hud {
     this.teachT += frameDt;
     if (this.arenaEventT > 0) {
       this.arenaEventT = Math.max(0, this.arenaEventT - frameDt);
-      this.arenaEvent.visible = this.arenaEventT > 0;
+      this.arenaEvent.visible = this.playVisible && this.arenaEventT > 0;
       this.arenaEvent.alpha = Math.min(1, this.arenaEventT * 1.5);
     }
     // Only touch Text when the value actually changed — every assignment
@@ -499,7 +511,7 @@ export class Hud {
     this.arenaEvent.text = message;
     this.arenaEventT = priority > 0 ? 4.2 : 2.4;
     this.arenaEventPriority = priority;
-    this.arenaEvent.visible = true;
+    this.arenaEvent.visible = this.playVisible;
     this.arenaEvent.alpha = 1;
     this.fitAnnounce();
   }
@@ -515,7 +527,9 @@ export class Hud {
    */
   private fitAnnounce(): void {
     if (this.width <= 0) return;
-    const room = this.width - 24;
+    // Leaves the top corners alone: the mute button lives in the right one and
+    // a centre-anchored line runs straight under it otherwise.
+    const room = this.width - 120;
     let size = 12;
     this.arenaEvent.style.fontSize = size;
     while (size > 8 && this.arenaEvent.width > room) {
@@ -531,7 +545,7 @@ export class Hud {
   }
 
   private drawLeaderboard(world: World): void {
-    this.leaderboard.visible = true;
+    this.leaderboard.visible = this.playVisible;
     const leaders = world.standings().slice(0, 4);
     const leader = leaders[0];
     if (leader && this.lastLeader >= 0 && leader.index !== this.lastLeader) {

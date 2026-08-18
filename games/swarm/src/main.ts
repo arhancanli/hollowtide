@@ -595,8 +595,7 @@ async function boot(): Promise<void> {
      * question.
      */
     const deathCause = arenaMode
-      ? `${world.player.deaths} DOWN  ·  ${world.player.pvpKills} TAKEN  ·  ` +
-        `${Math.floor(world.player.arenaScore)} MASS`
+      ? `${world.player.deaths} DOWN  ·  ${world.player.pvpKills} TAKEN`
       : lastAttacker && lastAttacker.index !== 0
         ? `${(lastAttacker.name || 'A RIVAL').toUpperCase()} CLAIMED YOU`
         : world.tideDamage > world.player.maxHp * 0.25
@@ -636,6 +635,17 @@ async function boot(): Promise<void> {
       arenaPlace,
       arenaSeats: world.players.length,
       arenaLeader: world.players.length > 1 ? (world.standings()[0]?.name || 'you') : '',
+      // Distance to first place, or the margin you won by. Computed from the
+      // same standings the board was showing a second ago.
+      arenaGap: (() => {
+        if (world.players.length <= 1) return 0;
+        const board = world.standings();
+        const top = board[0];
+        if (!top) return 0;
+        return top.index === 0
+          ? top.arenaScore - (board[1]?.arenaScore ?? top.arenaScore)
+          : top.arenaScore - world.player.arenaScore;
+      })(),
       arenaScore: world.player.arenaScore,
       pvpKills: world.player.pvpKills,
       arenaStreak: world.player.arenaStreak,
